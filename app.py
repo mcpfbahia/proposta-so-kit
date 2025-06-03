@@ -8,7 +8,14 @@ import re
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-st.set_page_config(page_title="Proposta - Múltiplos Kits", layout="centered")
+st.markdown("""
+<div style='text-align: center; padding: 12px 0; border-bottom: 2px solid #ccc;'>
+    <h1 style='margin-bottom: 5px; font-size: 36px; color: black; background-color: #f9c922; display: inline-block; padding: 8px 16px; border-radius: 8px;'>
+        Proposta Personalizada MCPF BAHIA
+    </h1>
+    <p style='margin-top: 8px; font-size: 18px; color: #333;'>Madeira Tratada com Garantia</p>
+</div>
+""", unsafe_allow_html=True)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 kits_file = os.path.join(BASE_DIR, 'kits.xlsx')
