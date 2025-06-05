@@ -169,14 +169,19 @@ def gerar_proposta_multikits(
         )
 
     # Calcula frete e estimativas com base no total_peso e total_area
-    frete_normal = (total_peso / 1000) * 1150  # R$ 1.150/tonelada
+    frete_normal = (total_peso / 1000) * 1129  # R$ 1.129/tonelada
     distancia_ref = 200
     frete_adicional = max(0, (distancia_loja - distancia_ref)) * 5.50
     frete_total = frete_normal + frete_adicional
     valor_final_com_frete = total_geral + frete_total
 
     # Estimativa de investimento total para casa pronta (1.8 × valor total bruto)
-    estimativa_casa_pronta_total = total_valor_bruto * 1.8
+    # Define se há algum modelo A-frame na lista
+    is_aframe = any(re.search(r'a[-\s]?frame', k['DESCRICAO'], re.IGNORECASE) for k in lista_kits)
+    fator_multiplicador = 1.85 if is_aframe else 1.90
+
+    # Estimativa da casa pronta com base na regra
+    estimativa_casa_pronta_total = total_valor_bruto * fator_multiplicador
 
     # Comparativo de custos
     cub_alvenaria = 2500
