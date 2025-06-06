@@ -175,10 +175,10 @@ def gerar_proposta_multikits(
     frete_total = frete_normal + frete_adicional
     valor_final_com_frete = total_geral + frete_total
 
-    # Estimativa de investimento total para casa pronta (1.8 × valor total bruto)
+    # Estimativa de investimento total para casa pronta (1.9 × valor total bruto)
     # Define se há algum modelo A-frame na lista
     is_aframe = any(re.search(r'a[-\s]?frame', k['DESCRICAO'], re.IGNORECASE) for k in lista_kits)
-    fator_multiplicador = 1.85 if is_aframe else 1.90
+    fator_multiplicador = 1.90 if is_aframe else 2.10
 
     # Estimativa da casa pronta com base na regra
     estimativa_casa_pronta_total = total_valor_bruto * fator_multiplicador
