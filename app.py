@@ -248,7 +248,7 @@ def gerar_proposta_multikits(
 
     os.makedirs(output_dir, exist_ok=True)
     nome_limpo = slugify(nome_cliente)
-    output_path = os.path.join(output_dir, f"Proposta_Multikits_{nome_limpo}.docx")
+    output_path = os.path.join(output_dir, f"Proposta_{nome_limpo}.docx")
     modelo.save(output_path)
     return output_path
 
