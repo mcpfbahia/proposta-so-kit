@@ -23,7 +23,12 @@ modelo_default = os.path.join(BASE_DIR, 'modelo-so-kit.docx')
 output_dir = os.path.join(BASE_DIR, 'propostas_geradas')
 
 def formatar_moeda(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    if valor is None or valor == '' or (isinstance(valor, float) and pd.isna(valor)):
+        return "Cálculo para o modelo não gerado"
+    try:
+        return f"R$ {float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "Cálculo para o modelo não gerado"
 
 def slugify(value):
     value = str(value).strip().replace(" ", "_")
@@ -81,15 +86,45 @@ def extrair_area(descricao, campo_area):
             return valor
     return 0.0
 
+# --- NOVA REGRA CHAVE NA MÃO ---
+def calcular_chave_na_mao(descricao, area):
+    desc = str(descricao).lower()
+    adicionais = [
+        "stain", "telha", "forro", "assoalho", "parede dupla",
+        "externo", "impregnante"
+    ]
+    if re.search(r"camping\s*1", desc):
+        return area * 2200
+    elif re.search(r"camping\s*2", desc):
+        return area * 2400
+    elif re.search(r"camping\s*3", desc):
+        return area * 2400
+    elif "a-frame" in desc or "aframe" in desc:
+        if area <= 60:
+            return area * 1700
+        else:
+            return area * 1650
+    elif ("kit" in desc and not any(x in desc for x in ["camping", "a-frame", "aframe"])
+          and not any(adicional in desc for adicional in adicionais)):
+        if area <= 42:
+            return area * 2000
+        else:
+            return area * 1900
+    elif ("pop" in desc or "pousada pop" in desc or "tiny house" in desc) and not any(adicional in desc for adicional in adicionais):
+        if area <= 42:
+            return area * 2000
+        else:
+            return area * 1900
+    return None
+
 def inserir_tabela_no_local(modelo, marcador, tabela_kits, total_geral):
     for i, par in enumerate(modelo.paragraphs):
         if marcador in par.text:
             p_element = par._element
             p_element.getparent().remove(p_element)
-            tabela = modelo.add_table(rows=1, cols=5)
+            tabela = modelo.add_table(rows=1, cols=6)  # Adiciona coluna para Chave na Mão!
             tabela.style = 'Light Grid'
-            # Largura ajustada: QUANT pequena, DESCRIÇÃO bem grande!
-            largura_colunas = [Cm(1.0), Cm(13), Cm(1.5), Cm(2.0), Cm(2.0)]
+            largura_colunas = [Cm(1.0), Cm(11), Cm(1.5), Cm(2.0), Cm(2.0), Cm(3.0)]
             for idx, width in enumerate(largura_colunas):
                 tabela.columns[idx].width = width
             hdr_cells = tabela.rows[0].cells
@@ -98,6 +133,7 @@ def inserir_tabela_no_local(modelo, marcador, tabela_kits, total_geral):
             hdr_cells[2].text = "VALOR UNITÁRIO"
             hdr_cells[3].text = "VALOR TOTAL"
             hdr_cells[4].text = "VALOR C/ DESC."
+            hdr_cells[5].text = "CHAVE NA MÃO"
             for row in tabela_kits:
                 row_cells = tabela.add_row().cells
                 for j, val in enumerate(row):
@@ -108,7 +144,7 @@ def inserir_tabela_no_local(modelo, marcador, tabela_kits, total_geral):
             total_row[2].text = ""
             total_row[3].text = ""
             total_row[4].text = formatar_moeda(total_geral)
-            # Fonte da tabela Segoe UI 11
+            total_row[5].text = ""
             ajustar_tabela_fonte(tabela, nome_fonte="Segoe UI", tamanho=11)
             tbl_element = tabela._element
             body = modelo._body._element
@@ -145,12 +181,17 @@ def gerar_proposta_multikits(
         valor_avista = valor_kit * (1 - desconto_percentual / 100)
         desconto_kit = valor_kit - valor_avista
 
+        # NOVO: calcula estimativa chave na mão para cada kit principal
+        valor_chave_mao = calcular_chave_na_mao(modelo_selecionado, area_unit)
+        valor_chave_mao_str = formatar_moeda(valor_chave_mao)
+
         tabela_kits.append([
             str(quantidade),
             modelo_selecionado,
             formatar_moeda(preco_normal),
             formatar_moeda(valor_kit),
-            formatar_moeda(valor_avista)
+            formatar_moeda(valor_avista),
+            valor_chave_mao_str
         ])
         total_geral += valor_avista
         total_peso += peso_unit * quantidade
@@ -159,31 +200,22 @@ def gerar_proposta_multikits(
         total_quantidade += quantidade
         total_desconto += desconto_kit
 
-        # Links
         link = kit_row['LINK_KIT']
         links_kits.append(f"{modelo_selecionado}: {link}")
 
-        # Resumo de valores para cada kit
         resumo_valores_kits.append(
-            f"• {modelo_selecionado}: Valor Unit. {formatar_moeda(preco_normal)} / QTD: {quantidade} / Valor Total: {formatar_moeda(valor_kit)} / Desconto: {formatar_moeda(desconto_kit)} / Valor c/ Desc: {formatar_moeda(valor_avista)}"
+            f"• {modelo_selecionado}: Valor Unit. {formatar_moeda(preco_normal)} / QTD: {quantidade} / Valor Total: {formatar_moeda(valor_kit)} / Desconto: {formatar_moeda(desconto_kit)} / Valor c/ Desc: {formatar_moeda(valor_avista)} / Chave na Mão: {valor_chave_mao_str}"
         )
 
     # Calcula frete e estimativas com base no total_peso e total_area
-    frete_normal = (total_peso / 1000) * 1129  # R$ 1.129/tonelada
+    frete_normal = (total_peso / 1000) * 1129
     distancia_ref = 200
     frete_adicional = max(0, (distancia_loja - distancia_ref)) * 5.50
     frete_total = frete_normal + frete_adicional
     valor_final_com_frete = total_geral + frete_total
 
-    # Estimativa de investimento total para casa pronta (1.9 × valor total bruto)
-    # Define se há algum modelo A-frame na lista
-    is_aframe = any(re.search(r'a[-\s]?frame', k['DESCRICAO'], re.IGNORECASE) for k in lista_kits)
-    fator_multiplicador = 1.90 if is_aframe else 2.10
+    # Não calcula mais chave na mão total geral, apenas mostra por kit na tabela!
 
-    # Estimativa da casa pronta com base na regra
-    estimativa_casa_pronta_total = total_valor_bruto * fator_multiplicador
-
-    # Comparativo de custos
     cub_alvenaria = 2500
     cub_prefab = 1800
     custo_alvenaria = cub_alvenaria * total_area
@@ -210,15 +242,15 @@ def gerar_proposta_multikits(
         '{{custo_chave_mao}}': formatar_moeda(custo_chave_mao),
         '{{economia_cub}}': formatar_moeda(economia_cub),
         '{{custo_mcpf}}': formatar_moeda(custo_mcpf),
-        '{{estimativa-casa-pronta}}': formatar_moeda(estimativa_casa_pronta_total),
-        '{{link_kit}}': "||LINK_PLACEHOLDER||",  # Para substituir por parágrafos depois!
+        # Chave na mão individual já vai na tabela
+        '{{link_kit}}': "||LINK_PLACEHOLDER||",
         '{{resumo_valores_kits}}': "\n".join(resumo_valores_kits),
         '{{preço_normal}}': formatar_moeda(total_valor_bruto/total_quantidade) if total_quantidade else 'R$ 0,00',
         '{{quant}}': str(total_quantidade),
         '{{valor_total}}': formatar_moeda(total_valor_bruto),
         '{{desconto}}': formatar_moeda(total_desconto),
         '{{50%_valor_avista}}': formatar_moeda(total_geral/2),
-        '{{area_casa}}': f"{total_area:.2f} m²",  # Mantido para compatibilidade
+        '{{area_casa}}': f"{total_area:.2f} m²",
     }
 
     modelo = Document(modelo_file)
@@ -232,14 +264,13 @@ def gerar_proposta_multikits(
                 for par in celula.paragraphs:
                     aplicar_negrito(par, substituicoes)
 
-    # Troca placeholder dos links por vários parágrafos (um abaixo do outro)
     for i, p in enumerate(modelo.paragraphs):
         if '||LINK_PLACEHOLDER||' in p.text:
             p_element = p._element
             parent = p_element.getparent()
             idx = parent.index(p_element)
             parent.remove(p_element)
-            for link in links_kits[::-1]:  # Adiciona de trás pra frente para manter ordem
+            for link in links_kits[::-1]:
                 new_par = modelo.add_paragraph(link)
                 parent.insert(idx, new_par._element)
             break
@@ -248,7 +279,7 @@ def gerar_proposta_multikits(
 
     os.makedirs(output_dir, exist_ok=True)
     nome_limpo = slugify(nome_cliente)
-    output_path = os.path.join(output_dir, f"Proposta_Multikits_{nome_limpo}.docx")
+    output_path = os.path.join(output_dir, f"Proposta_{nome_limpo}.docx")
     modelo.save(output_path)
     return output_path
 
